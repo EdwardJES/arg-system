@@ -18,7 +18,7 @@ pub fn generate_p_eval_and_roots(poly_str: &str, eval_point: i32) -> (i32, Vec<f
             root_vec = vec;
         }
         _ => {
-            panic!("could not calcuate roots for p(x)")
+            panic!("could not get real roots for p(x)")
         }
     }
 
@@ -26,49 +26,12 @@ pub fn generate_p_eval_and_roots(poly_str: &str, eval_point: i32) -> (i32, Vec<f
     return (p.eval(eval_point), root_vec)
 }
 
-pub fn add() -> Result<(), String> {
-    // polynomial string
-    let poly_str = "x^3-3x^2+2x";
-    // evaluation point
-    let x = 5;
-
-    // generate p(x)
-    let p = Polynomial::<i32>::from_str(poly_str).unwrap();
-    let roots = calculate_roots(p.to_string().as_str()).unwrap();
-
-    // extract roots
-    let root_vec: Vec<f64>;
-    match roots {
-        Roots::ManyRealRoots(mut vec) => {
-            // discard last element as that is always 0
-            vec.pop();
-            root_vec = vec;
-        }
-        _ => {
-            panic!("could not calcuate roots for p(x)")
-        }
-    }
-
-    // generate t(x) eval
-    let t_eval = eval_roots(&root_vec, x);
-
-    return Ok(());
-}
-
-// Reminder that slices (regions of an array or vector) and str (region of strings), can be any size hence they must be passed and stored as references
-fn calculate_roots(poly_str: &str) -> Result<Roots<f64>, <Polynomial<f64> as FromStr>::Err> {
-    // to get the roots, the polynomial needs to be of the f64 type
-    // create the f64 type from the poly string
-    let poly_float = Polynomial::<f64>::from_str(poly_str)?;
-    return Ok(poly_float.roots());
-}
-
-fn eval_roots(roots: &[f64], eval_point: i32) -> i32 {
+pub fn eval_roots(roots: &[f64], eval_point: i32) -> i32 {
     let eval = roots.iter().map(|x| *x as i32 - eval_point).product();
     return eval;
 }
 
-fn format_target_polynomial(roots: &[f64]) -> String {
+pub fn format_target_polynomial(roots: &[f64]) -> String {
     let substr = "(x-";
     let mut target_poly = String::new();
     for root in roots {
@@ -82,13 +45,23 @@ fn format_target_polynomial(roots: &[f64]) -> String {
     return target_poly;
 }
 
+// Reminder that slices (regions of an array or vector) and str (region of strings), can be any size hence they must be passed and stored as references
+fn calculate_roots(poly_str: &str) -> Result<Roots<f64>, <Polynomial<f64> as FromStr>::Err> {
+    // to get the roots, the polynomial needs to be of the f64 type
+    // create the f64 type from the poly string
+    let poly_float = Polynomial::<f64>::from_str(poly_str)?;
+    return Ok(poly_float.roots());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        add().unwrap()
+    fn test_generate_eval_with_roots() {
+        let (eval, roots) = generate_p_eval_and_roots("x^3-3x^2+2x", 23);
+        assert_eq!(10626, eval);
+        assert_eq!(vec![1.0, 2.0], roots);
     }
 
     #[test]
