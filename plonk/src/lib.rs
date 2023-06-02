@@ -45,6 +45,20 @@ impl Gate {
 #[derive(Debug)]
 struct Trace(i32, i32, i32);
 
+impl Trace {
+    const ADD:  &str = "+";
+    const MINUS: &str = "-";
+    const MUL:   &str = "*";
+
+    fn new(program : &str) -> Self {
+        
+    }
+
+    fn new_trace(program : &str) -> Vec<Self> {
+        
+    }
+}
+
 fn eval_q_row(gate :Gate, trace : Trace) -> i32 {
     // Ai(QL)i + Bi(QR)i + AiBiQm + Ci(QO)i + QCi
     trace.0*gate.0 + trace.1*gate.1 + trace.0*trace.1*gate.2 + trace.2*gate.3 + gate.4
