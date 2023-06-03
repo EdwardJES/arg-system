@@ -29,15 +29,32 @@
 
 // evaluation:
 
-use std::{
-    collections::{HashMap, HashSet},
-    f32::MIN, fmt::format,
-};
+use std::collections::HashSet;
+
+struct Program {
+    inputs: Vec<i32>,
+    equation: String,
+}
+
+impl Program {
+    fn new(inputs :Vec<i32>, equation :&str) -> Self {
+        let char_set : HashSet<char> = equation.chars().into_iter().collect();
+        let mut char_counter = 0;
+        for c in char_set {
+            if c.is_alphabetic() {
+                char_counter += 1;
+            }
+        }
+        assert!(char_counter == inputs.len(), "Number of inputs must match number of variables in equation");
+
+        Self {
+            inputs,
+            equation: equation.to_string(),
+        }
+    }
+}
 
 const PROGRAM: &str = "e * x + x - 1";
-const ADD: char = '+';
-const MINUS: char = '-';
-const MUL: char = '*';
 
 #[derive(Debug)]
 struct QGate(i32, i32, i32, i32, i32);
@@ -65,17 +82,20 @@ struct Gate {
 }
 
 impl Gate {
+    const ADD: char = '+';
+    const MINUS: char = '-';
+    const MUL: char = '*';
+
     fn new_gates(program: &str) -> Vec<Self> {
         let mut v_matrix: Vec<Gate> = Vec::new();
-        // replace all spaces
         let program = program.replace(" ", "");
         let chars: Vec<char> = program.chars().collect();
 
-        // itterative over all character, where an operator is found, a new gate is created
+        // itterative over all characters, where an operator is found, a new gate is created
         for i in 0..chars.len() {
-            if chars[i] == ADD || chars[i] == MINUS || chars[i] == MUL {
+            if chars[i] == Self::ADD || chars[i] == Self::MINUS || chars[i] == Self::MUL {
                 // build l, r, o nodes
-                let mut l;
+                let l;
                 let r = chars[i + 1].to_string();
                 let o = format!("GO:{}", v_matrix.len());
 
@@ -84,9 +104,8 @@ impl Gate {
                     l = chars[i - 1].to_string();
                 } else {
                     // else l is the output of the previous gate
-                    l = v_matrix[v_matrix.len()-1].gate.2.clone();
+                    l = v_matrix[v_matrix.len() - 1].gate.2.clone();
                 }
-
 
                 match chars[i] {
                     MUL => v_matrix.push(Gate {
@@ -102,7 +121,6 @@ impl Gate {
         }
         v_matrix
     }
-
 }
 
 #[derive(Debug)]
@@ -119,6 +137,24 @@ fn eval_q_row(gate: QGate, trace: Trace) -> i32 {
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_new_program() {
+        let inputs = vec![1, 2];
+        let equation = "e * x + x - 1";
+        let program = Program::new(inputs, equation);
+        assert_eq!(program.inputs, vec![1, 2]);
+        assert_eq!(program.equation, "e * x + x - 1");
+    }
+
+    #[test]
+    #[allow(unconditional_panic)]
+    #[should_panic(expected = "Number of inputs must match number of variables in equation")]
+    fn test_new_program_panic() {
+        let inputs = vec![1, 2];
+        let equation = "e * x + x - 1 + y";
+        Program::new(inputs, equation);
+    }
+    
     #[test]
     fn test_eval_add_gate() {
         let gate = QGate::new_add();
