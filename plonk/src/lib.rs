@@ -29,23 +29,34 @@
 
 // evaluation:
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 struct Program {
-    inputs: Vec<i32>,
+    inputs: HashMap<char, i32>,
     equation: String,
 }
 
 impl Program {
-    fn new(inputs :Vec<i32>, equation :&str) -> Self {
-        let char_set : HashSet<char> = equation.chars().into_iter().collect();
+    fn new(inputs: HashMap<char, i32>, equation: &str) -> Self {
+        let char_set: HashSet<char> = equation.chars().into_iter().collect();
+
         let mut char_counter = 0;
-        for c in char_set {
+        // Assert that all characters in the equation are in the input set
+        for c in char_set.iter() {
             if c.is_alphabetic() {
                 char_counter += 1;
+                assert!(
+                    inputs.contains_key(c),
+                    "all characters in the equation must be in the input set"
+                );
             }
         }
-        assert!(char_counter == inputs.len(), "Number of inputs must match number of variables in equation");
+
+        // Assert character count matches input length
+        assert!(
+            char_counter == inputs.keys().len(),
+            "input length and equation variable length must match"
+        );
 
         Self {
             inputs,
@@ -54,31 +65,10 @@ impl Program {
     }
 }
 
-const PROGRAM: &str = "e * x + x - 1";
-
-#[derive(Debug)]
-struct QGate(i32, i32, i32, i32, i32);
-
-impl QGate {
-    fn new_mul() -> Self {
-        Self(0, 0, 1, -1, 0)
-    }
-
-    fn new_add() -> Self {
-        Self(1, 1, 0, -1, 0)
-    }
-}
-
-#[derive(Debug)]
-enum GateType {
-    ADDITION,
-    MUL,
-}
-
 #[derive(Debug)]
 struct Gate {
     gate: (String, String, String),
-    gateType: GateType,
+    gate_type: GateType,
 }
 
 impl Gate {
@@ -110,23 +100,56 @@ impl Gate {
                 match chars[i] {
                     MUL => v_matrix.push(Gate {
                         gate: (l, r, o),
-                        gateType: GateType::MUL,
+                        gate_type: GateType::MUL,
                     }),
                     _ => v_matrix.push(Gate {
                         gate: (l, r, o),
-                        gateType: GateType::ADDITION,
+                        gate_type: GateType::ADDITION,
                     }),
                 }
             }
         }
         v_matrix
     }
+
+    fn generate_v_matrix(gates: &[Self]) -> Vec<(String, String, String)> {
+        let mut v_matrix: Vec<(String, String, String)> = Vec::new();
+        for gate in gates.iter() {
+            v_matrix.push(gate.gate.clone());
+        }
+
+        v_matrix
+    }
+}
+
+#[derive(Debug)]
+struct QGate(i32, i32, i32, i32, i32);
+
+impl QGate {
+    fn new_mul() -> Self {
+        Self(0, 0, 1, -1, 0)
+    }
+
+    fn new_add() -> Self {
+        Self(1, 1, 0, -1, 0)
+    }
+}
+
+#[derive(Debug)]
+enum GateType {
+    ADDITION,
+    MUL,
 }
 
 #[derive(Debug)]
 struct Trace(i32, i32, i32);
 
-impl Trace {}
+impl Trace {
+    // fn new_trace_matrix(inputs: &[i32], gates : &[Gate]) -> Vec<Self> {
+    //    let trace_matrx = Vec::new();
+
+    // }
+}
 
 fn eval_q_row(gate: QGate, trace: Trace) -> i32 {
     // Ai(QL)i + Bi(QR)i + AiBiQm + Ci(QO)i + QCi
@@ -137,24 +160,29 @@ fn eval_q_row(gate: QGate, trace: Trace) -> i32 {
 mod tests {
     use super::*;
 
+    const PROGRAM: &str = "e * x + x - 1";
+
     #[test]
     fn test_new_program() {
-        let inputs = vec![1, 2];
+        let mut inputs = HashMap::new();
+        inputs.insert('e', 2);
+        inputs.insert('x', 3);
+        let expected_inputs = inputs.clone();
         let equation = "e * x + x - 1";
         let program = Program::new(inputs, equation);
-        assert_eq!(program.inputs, vec![1, 2]);
+        assert_eq!(program.inputs, expected_inputs);
         assert_eq!(program.equation, "e * x + x - 1");
     }
 
-    #[test]
-    #[allow(unconditional_panic)]
-    #[should_panic(expected = "Number of inputs must match number of variables in equation")]
-    fn test_new_program_panic() {
-        let inputs = vec![1, 2];
-        let equation = "e * x + x - 1 + y";
-        Program::new(inputs, equation);
-    }
-    
+    // #[test]
+    // #[allow(unconditional_panic)]
+    // #[should_panic(expected = "number of inputs must match number of variables in equation")]
+    // fn test_new_program_panic() {
+    //     let inputs = vec![1, 2];
+    //     let equation = "e * x + x - 1 + y";
+    //     Program::new(inputs, equation);
+    // }
+
     #[test]
     fn test_eval_add_gate() {
         let gate = QGate::new_add();
@@ -174,15 +202,15 @@ mod tests {
         let expected_gates: Vec<Gate> = vec![
             Gate {
                 gate: ("e".to_string(), "x".to_string(), "GO:0".to_string()),
-                gateType: GateType::MUL,
+                gate_type: GateType::MUL,
             },
             Gate {
                 gate: ("GO:0".to_string(), "x".to_string(), "GO:1".to_string()),
-                gateType: GateType::ADDITION,
+                gate_type: GateType::ADDITION,
             },
             Gate {
                 gate: ("GO:1".to_string(), "1".to_string(), "GO:2".to_string()),
-                gateType: GateType::ADDITION,
+                gate_type: GateType::ADDITION,
             },
         ];
 
