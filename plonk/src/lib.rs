@@ -31,7 +31,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-struct Program {
+pub struct Program {
     inputs: HashMap<char, i32>,
     equation: String,
 }
@@ -63,6 +63,14 @@ impl Program {
             equation: equation.to_string(),
         }
     }
+}
+
+#[derive(PartialEq)]
+#[derive(Debug)]
+enum GateType {
+    ADDITION,
+    MUL,
+    MINUS,
 }
 
 #[derive(Debug)]
@@ -98,10 +106,15 @@ impl Gate {
                 }
 
                 match chars[i] {
-                    MUL => v_matrix.push(Gate {
+                    Self::MUL => v_matrix.push(Gate {
                         gate: (l, r, o),
                         gate_type: GateType::MUL,
                     }),
+                    Self::MINUS => v_matrix.push(Gate {
+                        gate: (l, r, o),
+                        gate_type: GateType::MINUS
+                    }),
+                    // TODO: add error handling here. When char is not +, *, -
                     _ => v_matrix.push(Gate {
                         gate: (l, r, o),
                         gate_type: GateType::ADDITION,
@@ -136,19 +149,59 @@ impl QGate {
 }
 
 #[derive(Debug)]
-enum GateType {
-    ADDITION,
-    MUL,
-}
-
-#[derive(Debug)]
 struct Trace(i32, i32, i32);
 
 impl Trace {
-    // fn new_trace_matrix(inputs: &[i32], gates : &[Gate]) -> Vec<Self> {
-    //    let trace_matrx = Vec::new();
+    // new_trace_matrix will take in the inputs to the program
+    // and a slice of gates.
+    // e.g. inputs: e = 2, x = 3
+    // gate: e * x = GO:O, MUL
+    // expected trace:
+    // A    B   C
+    // 2    3   6
+    fn new_trace_matrix(inputs : HashMap<String, i32>, gates: &[Gate]) -> Vec<Self> {
+        let mut trace_matrix : Vec<Trace> = Vec::new();
 
-    // }
+        let mut gate_output : i32;
+        for i in 0..gates.len() {
+            let a : i32;
+            let b : i32;
+            if i == 0 {
+                a = Self::parse_cell(gates[i].gate.0.as_str(), &inputs);
+                b = Self::parse_cell(gates[i].gate.1.as_str(), &inputs);
+                trace_matrix.push(Trace(a, b, Self::eval_v_row([a, b], &gates[i].gate_type)));
+            } else {
+                // a is now the output of the previous gate
+                a = trace_matrix[i-1].2;
+                b = Self::parse_cell(gates[i].gate.1.as_str(), &inputs);
+                trace_matrix.push(Trace(a, b, Self::eval_v_row([a, b], &gates[i].gate_type)))
+            }
+        }
+
+        trace_matrix
+    }
+
+    fn parse_cell(value : &str, inputs : &HashMap<String, i32>) -> i32 {
+        if inputs.contains_key(value) {
+            *inputs.get(value).unwrap()
+        } else {
+            value.parse::<i32>().unwrap()
+        }
+    }
+    
+    fn eval_v_row(inputs : [i32; 2], gate : &GateType) -> i32 {
+        match gate {
+            GateType::MUL => {
+                inputs[0] * inputs[1]
+            }
+            GateType::ADDITION => {
+                inputs[0] + inputs[1]
+            },
+            GateType::MINUS => {
+                inputs[0] - inputs[1]
+            }
+        }
+    }
 }
 
 fn eval_q_row(gate: QGate, trace: Trace) -> i32 {
@@ -173,15 +226,6 @@ mod tests {
         assert_eq!(program.inputs, expected_inputs);
         assert_eq!(program.equation, "e * x + x - 1");
     }
-
-    // #[test]
-    // #[allow(unconditional_panic)]
-    // #[should_panic(expected = "number of inputs must match number of variables in equation")]
-    // fn test_new_program_panic() {
-    //     let inputs = vec![1, 2];
-    //     let equation = "e * x + x - 1 + y";
-    //     Program::new(inputs, equation);
-    // }
 
     #[test]
     fn test_eval_add_gate() {
@@ -210,12 +254,42 @@ mod tests {
             },
             Gate {
                 gate: ("GO:1".to_string(), "1".to_string(), "GO:2".to_string()),
-                gate_type: GateType::ADDITION,
+                gate_type: GateType::MINUS,
             },
         ];
 
-        assert_eq!(expected_gates[0].gate, Gate::new_gates(PROGRAM)[0].gate);
-        assert_eq!(expected_gates[1].gate, Gate::new_gates(PROGRAM)[1].gate);
-        assert_eq!(expected_gates[2].gate, Gate::new_gates(PROGRAM)[2].gate);
+        let output_gates = Gate::new_gates(PROGRAM);
+        assert_eq!(expected_gates[0].gate, output_gates[0].gate);
+        assert_eq!(expected_gates[0].gate_type, output_gates[0].gate_type);
+        assert_eq!(expected_gates[1].gate, output_gates[1].gate);
+        assert_eq!(expected_gates[1].gate_type, output_gates[1].gate_type);
+        assert_eq!(expected_gates[2].gate, output_gates[2].gate);
+        assert_eq!(expected_gates[2].gate_type, output_gates[2].gate_type);
+    }
+
+    #[test]
+    fn test_new_v_matrix() {
+        let expected_v_matrix: Vec<(String, String, String)> = vec![
+            ("e".to_string(), "x".to_string(), "GO:0".to_string()),
+            ("GO:0".to_string(), "x".to_string(), "GO:1".to_string()),
+            ("GO:1".to_string(), "1".to_string(), "GO:2".to_string()),
+        ];
+
+        let output_gates = Gate::new_gates(PROGRAM);
+        let v_matrix = Gate::generate_v_matrix(&output_gates);
+        assert_eq!(expected_v_matrix[0], v_matrix[0]);
+        assert_eq!(expected_v_matrix[1], v_matrix[1]);
+        assert_eq!(expected_v_matrix[2], v_matrix[2]);
+    }
+
+    #[test]
+    fn test_generate_trace() {
+        let gates = Gate::new_gates(PROGRAM);
+        let mut inputs = HashMap::new();
+        inputs.insert("e".to_string(), 2);
+        inputs.insert("x".to_string(), 3);
+        
+        let trace = Trace::new_trace_matrix(inputs, &gates);
+        println!("{:?}", trace)
     }
 }
