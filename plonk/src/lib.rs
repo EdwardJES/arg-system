@@ -90,38 +90,38 @@ impl Trace {
     fn new_trace_matrix(inputs: &HashMap<String, i32>, gates: &[Gate]) -> Vec<Self> {
         let mut trace_matrix: Vec<Trace> = Vec::new();
 
+        fn parse_cell(value: &str, inputs: &HashMap<String, i32>) -> i32 {
+            if inputs.contains_key(value) {
+                *inputs.get(value).unwrap()
+            } else {
+                value.parse::<i32>().unwrap()
+            }
+        }
+
+        fn eval_v_row(inputs: [i32; 2], gate: &GateType) -> i32 {
+            match gate {
+                GateType::MUL => inputs[0] * inputs[1],
+                GateType::ADDITION => inputs[0] + inputs[1],
+                GateType::MINUS => inputs[0] - inputs[1],
+            }
+        }
+
         for i in 0..gates.len() {
             let a: i32;
             let b: i32;
             if i == 0 {
-                a = Self::parse_cell(gates[i].gate.0.as_str(), &inputs);
-                b = Self::parse_cell(gates[i].gate.1.as_str(), &inputs);
-                trace_matrix.push(Trace(a, b, Self::eval_v_row([a, b], &gates[i].gate_type)));
+                a = parse_cell(gates[i].gate.0.as_str(), &inputs);
+                b = parse_cell(gates[i].gate.1.as_str(), &inputs);
+                trace_matrix.push(Trace(a, b, eval_v_row([a, b], &gates[i].gate_type)));
             } else {
                 // a is now the output of the previous gate
                 a = trace_matrix[i - 1].2;
-                b = Self::parse_cell(gates[i].gate.1.as_str(), &inputs);
-                trace_matrix.push(Trace(a, b, Self::eval_v_row([a, b], &gates[i].gate_type)));
+                b = parse_cell(gates[i].gate.1.as_str(), &inputs);
+                trace_matrix.push(Trace(a, b, eval_v_row([a, b], &gates[i].gate_type)));
             }
         }
 
         trace_matrix
-    }
-
-    fn parse_cell(value: &str, inputs: &HashMap<String, i32>) -> i32 {
-        if inputs.contains_key(value) {
-            *inputs.get(value).unwrap()
-        } else {
-            value.parse::<i32>().unwrap()
-        }
-    }
-
-    fn eval_v_row(inputs: [i32; 2], gate: &GateType) -> i32 {
-        match gate {
-            GateType::MUL => inputs[0] * inputs[1],
-            GateType::ADDITION => inputs[0] + inputs[1],
-            GateType::MINUS => inputs[0] - inputs[1],
-        }
     }
 }
 
@@ -183,6 +183,16 @@ impl Program {
 
     fn evaluate_q_matrix(&self) -> Result<(), String> {
         let mut output: i32 = 0;
+
+        fn eval_q_row(gate: QGate, trace: &Trace) -> i32 {
+            // Ai(QL)i + Bi(QR)i + AiBiQm + Ci(QO)i + QCi
+            trace.0 * gate.0
+                + trace.1 * gate.1
+                + trace.0 * trace.1 * gate.2
+                + trace.2 * gate.3
+                + gate.4
+        }
+
         for i in 0..self.gates.len() {
             // For each row:
             // -> classify gate type, inclusive of constant
@@ -193,30 +203,31 @@ impl Program {
             // x 1 o => 1 - 0
             // B column becomes 0 and value is encoded in the Qc col of Q matrix
             let has_const = match &self.v_matrix[i] {
-                (l, r, _) if r.chars().all(|c| c.is_digit(10)) => true,
+                (_, r, _) if r.chars().all(|c| c.is_digit(10)) => true,
                 (_, _, _) => false,
             };
+
             output += match &self.gates[i] {
-                GateType::MUL => Self::eval_q_row(QGate::new_mul(), &self.trace[i]),
+                GateType::MUL => eval_q_row(QGate::new_mul(), &self.trace[i]),
                 GateType::ADDITION => match has_const {
                     true => {
                         let mut q_gate = QGate::new_add();
                         q_gate.4 = self.trace[i].1;
                         let trace = Trace(self.trace[i].0, 0, self.trace[i].2);
-                        Self::eval_q_row(q_gate, &trace)
+                        eval_q_row(q_gate, &trace)
                     }
-                    false => Self::eval_q_row(QGate::new_add(), &self.trace[i]),
+                    false => eval_q_row(QGate::new_add(), &self.trace[i]),
                 },
                 _ => match has_const {
                     true => {
                         let q_gate = QGate::new_add();
                         let sub_gate = QGate(q_gate.0, q_gate.1, q_gate.2, q_gate.3, q_gate.4 + -1);
                         let trace = Trace(self.trace[i].0, 0, self.trace[i].2);
-                        Self::eval_q_row(sub_gate, &trace)
+                        eval_q_row(sub_gate, &trace)
                     }
                     false => {
                         let trace = Trace(self.trace[i].0, self.trace[i].1 * -1, self.trace[i].2);
-                        Self::eval_q_row(QGate::new_add(), &trace)
+                        eval_q_row(QGate::new_add(), &trace)
                     }
                 },
             };
@@ -229,13 +240,7 @@ impl Program {
         }
     }
 
-    fn eval_q_row(gate: QGate, trace: &Trace) -> i32 {
-        // Ai(QL)i + Bi(QR)i + AiBiQm + Ci(QO)i + QCi
-        println!("{:?}", gate);
-        println!("{:?}", trace);
-        let ret = trace.0 * gate.0 + trace.1 * gate.1 + trace.0 * trace.1 * gate.2 + trace.2 * gate.3 + gate.4;
-        ret
-    }
+    
 }
 
 #[cfg(test)]
@@ -244,18 +249,22 @@ mod tests {
 
     const equation: &str = "e * x + x - 1";
 
+    fn eval_q_row(gate: QGate, trace: &Trace) -> i32 {
+        trace.0 * gate.0 + trace.1 * gate.1 + trace.0 * trace.1 * gate.2 + trace.2 * gate.3 + gate.4
+    }
+
     #[test]
     fn test_eval_add_gate() {
         let gate = QGate::new_add();
         let trace = Trace(1, 2, 3);
-        assert_eq!(Program::eval_q_row(gate, &trace), 0);
+        assert_eq!(eval_q_row(gate, &trace), 0);
     }
 
     #[test]
     fn test_eval_mul_gate() {
         let gate = QGate::new_mul();
         let trace = Trace(2, 5, 10);
-        assert_eq!(Program::eval_q_row(gate, &trace), 0);
+        assert_eq!(eval_q_row(gate, &trace), 0);
     }
 
     #[test]
